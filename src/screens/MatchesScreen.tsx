@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Button, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Button, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MatchCard } from '../components/MatchCard';
+import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
-import type { MatchesResponse } from '../models/matches';
+import { filterMatches, type MatchFilter, type MatchesResponse } from '../models/matches';
+
+const filters: { value: MatchFilter; label: string }[] = [
+  { value: 'all', label: 'Все' },
+  { value: 'upcoming', label: 'Предстоящие' },
+  { value: 'finished', label: 'Завершённые' },
+];
 
 export function MatchesScreen() {
   const [data, setData] = useState<MatchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<MatchFilter>('all');
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const activeRequest = useRef<AbortController | null>(null);
 
   const loadMatches = useCallback(async () => {
@@ -26,6 +35,7 @@ export function MatchesScreen() {
       }
       if (activeRequest.current !== controller) return;
       setData(result);
+      setUpdatedAt(new Date());
     } catch {
       if (activeRequest.current !== controller) return;
       setError('Не удалось загрузить матчи. Проверьте подключение и попробуйте ещё раз.');
@@ -47,23 +57,48 @@ export function MatchesScreen() {
     };
   }, [loadMatches]);
 
+  const visibleMatches = filterMatches(data?.matches ?? [], filter);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Матчи тура{data ? ` · ${data.round}` : ''}</Text>
-      {loading && <ActivityIndicator accessibilityLabel="Загрузка матчей" />}
+      <View style={styles.toolbar}>
+        <Text style={styles.hint}>Время начала — в часовом поясе устройства</Text>
+        <Button title={loading ? 'Загрузка…' : 'Обновить'} onPress={() => void loadMatches()} disabled={loading} />
+      </View>
+      {updatedAt && <UpdatedAgo since={updatedAt} />}
+      <View style={styles.filters}>
+        {filters.map(({ value, label }) => (
+          <Pressable
+            key={value}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filter === value }}
+            onPress={() => setFilter(value)}
+            style={[styles.filter, filter === value && styles.selectedFilter]}
+          >
+            <Text style={[styles.filterLabel, filter === value && styles.selectedLabel]}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {loading && !data && <ActivityIndicator accessibilityLabel="Загрузка матчей" />}
       {error && (
         <View style={styles.message}>
           <Text accessibilityRole="alert">{error}</Text>
+          {data && <Text style={styles.hint}>Показаны данные последней успешной загрузки.</Text>}
           <Button title="Повторить" onPress={() => void loadMatches()} disabled={loading} />
         </View>
       )}
       {data && (
         <FlatList
-          data={data.matches}
+          data={visibleMatches}
           keyExtractor={(match) => match.id}
           renderItem={({ item }) => <MatchCard match={item} />}
+          refreshing={loading}
+          onRefresh={() => void loadMatches()}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text>В этом туре пока нет матчей.</Text>}
+          ListEmptyComponent={
+            <Text>{data.matches.length === 0 ? 'В этом туре пока нет матчей.' : 'В этой категории нет матчей.'}</Text>
+          }
         />
       )}
     </View>
@@ -73,6 +108,13 @@ export function MatchesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 16, width: '100%', maxWidth: 760, alignSelf: 'center' },
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
+  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  hint: { fontSize: 13, color: '#6b7280', flexShrink: 1 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filter: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: '#f3f4f6' },
+  selectedFilter: { backgroundColor: '#1d4ed8' },
+  filterLabel: { fontSize: 14, color: '#374151' },
+  selectedLabel: { color: '#fff' },
   list: { gap: 12, paddingBottom: 24 },
   message: { gap: 8 },
 });
