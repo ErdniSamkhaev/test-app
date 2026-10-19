@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Button, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MatchCard } from '../components/MatchCard';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { useFavorites } from '../hooks/useFavorites';
 import { UpdatedAgo } from '../components/UpdatedAgo';
 import { MATCHES_URL } from '../config';
 import { filterMatches, type MatchFilter, type MatchesResponse } from '../models/matches';
@@ -12,6 +14,7 @@ const filters: { value: MatchFilter; label: string }[] = [
 ];
 
 export function MatchesScreen() {
+  const { favorites, isFavorite, toggle } = useFavorites();
   const [data, setData] = useState<MatchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +95,12 @@ export function MatchesScreen() {
         <FlatList
           data={visibleMatches}
           keyExtractor={(match) => match.id}
-          renderItem={({ item }) => <MatchCard match={item} />}
+          extraData={favorites}
+          renderItem={({ item }) => (
+            <MatchCard match={item}>
+              <FavoriteButton active={isFavorite(item.id)} onPress={() => toggle(item.id)} />
+            </MatchCard>
+          )}
           refreshing={loading}
           onRefresh={() => void loadMatches()}
           contentContainerStyle={styles.list}
@@ -118,3 +126,4 @@ const styles = StyleSheet.create({
   list: { gap: 12, paddingBottom: 24 },
   message: { gap: 8 },
 });
+
